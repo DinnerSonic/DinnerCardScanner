@@ -2,7 +2,7 @@
 const $ = id => document.getElementById(id);
 const VLABEL = {normal:"Non-holo", holo:"Holo", reverse:"Reverse", pokeball:"Poké Ball / Patterned", masterball:"Alt Ball / Alt Pattern", unset:"Finish not set"};
 const ALWAYS_HOLO = ["30C"];
-const GUIDE_SIZES = [10, 13, 17, 22];
+const GUIDE_SIZES = [6, 8, 10, 13, 17, 22];
 const LOCK_HITS = 2;          // same reading this many times in a row before it counts
 const SAME_CARD_COOLDOWN = 2500; // ms before the card you just added can lock again
 
@@ -15,7 +15,7 @@ const S = {
   index: null, codes: null, worker: null, stream: null, track: null,
   scanning: false, busy: false, frame: 0, history: [], locked: null, qty: 1, pick: 0,
   variant: store.get("variant", "default"), auto: store.get("auto", false),
-  batch: store.get("batch", {}), lastAdded: null, guide: store.get("guide", 1), debug: false, wake: null
+  batch: store.get("batch", {}), lastAdded: null, guide: store.get("guide2", 2), debug: false, wake: null, mode: store.get("mode", "snap"), snapping: false, imageCapture: null
 };
 
 /* ---------- finish defaults (same rules as the tally app) ---------- */
@@ -58,9 +58,19 @@ async function startCamera(){
       await S.worker.setParameters({ tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/ ", tessedit_pageseg_mode:"7", preserve_interword_spaces:"1" });
     } catch(e){ setStatus("Couldn't load the text reader. Check your connection and reload.", true); return; }
   }
-  S.scanning = true; setStatus("Looking for the card code…", false, true);
-  loop();
+  try { S.imageCapture = window.ImageCapture ? new ImageCapture(S.track) : null; } catch(e){ S.imageCapture = null; }
+  applyMode();
 }
+function applyMode(){
+  const snap = S.mode === "snap";
+  $("mode").textContent = snap ? "SNAP" : "LIVE";
+  $("shutter").hidden = !snap || !S.stream;
+  $("guide").dataset.hint = snap ? "fill the box, then tap" : "line up:  H  SVI  EN  086/198";
+  if (!S.stream) return;
+  if (snap){ S.scanning = false; if (!S.locked) setStatus("Line up the code in the box, then tap the shutter."); }
+  else { S.scanning = true; if (!S.locked){ setStatus("Looking for the card code…", false, true); loop(); } }
+}
+$("mode").addEventListener("click", () => { S.mode = S.mode === "snap" ? "live" : "snap"; store.set("mode", S.mode); applyMode(); });
 function fail(msg){ $("startErr").textContent = msg; $("startErr").hidden = false; }
 function setupTrackControls(){
   const caps = S.track.getCapabilities ? S.track.getCapabilities() : {};
@@ -86,26 +96,33 @@ document.addEventListener("visibilitychange", async () => {
 
 /* ---------- guide box ---------- */
 function applyGuide(){ $("guide").style.setProperty("--gh", GUIDE_SIZES[S.guide] + "%"); }
-$("guideSize").addEventListener("click", () => { S.guide = (S.guide + 1) % GUIDE_SIZES.length; store.set("guide", S.guide); applyGuide(); });
+$("guideSize").addEventListener("click", () => { S.guide = (S.guide + 1) % GUIDE_SIZES.length; store.set("guide2", S.guide); applyGuide(); });
 $("debug").addEventListener("click", () => { S.debug = !S.debug; $("debug").setAttribute("aria-pressed", String(S.debug)); $("ocrview").hidden = !S.debug; $("raw").hidden = !S.debug; });
 applyGuide();
 
 /* ---------- frame grab + clean-up for the reader ---------- */
 const work = document.createElement("canvas");
-function grabCrop(){
+// Where the guide box sits, as fractions (0..1) of the video frame.
+function guideFrac(){
   const v = $("video"), cam = $("cam"), g = $("guide");
   const vw = v.videoWidth, vh = v.videoHeight; if (!vw) return null;
   const cr = cam.getBoundingClientRect(), gr = g.getBoundingClientRect();
   const scale = Math.max(cr.width / vw, cr.height / vh);
   const ox = (cr.width - vw*scale)/2, oy = (cr.height - vh*scale)/2;
-  const sx = (gr.left - cr.left - ox)/scale, sy = (gr.top - cr.top - oy)/scale, sw = gr.width/scale, sh = gr.height/scale;
-  // scale the strip so text is a comfortable size for the reader
-  const outH = 90, k = outH / sh, outW = Math.round(sw * k), pad = 16;
+  return { x:(gr.left - cr.left - ox)/scale/vw, y:(gr.top - cr.top - oy)/scale/vh, w:gr.width/scale/vw, h:gr.height/scale/vh, aspect: vw/vh };
+}
+function grabCrop(){
+  const v = $("video"), f = guideFrac(); if (!f) return null;
+  return prep(v, f.x*v.videoWidth, f.y*v.videoHeight, f.w*v.videoWidth, f.h*v.videoHeight, 90, S.frame % 2 === 0);
+}
+// Crop a strip out of src, scale it so its height is outH, and clean it up for the reader.
+function prep(src, sx, sy, sw, sh, outH, binarize){
+  const k = outH / sh, outW = Math.round(sw * k), pad = 16;
   work.width = outW + pad*2; work.height = outH + pad*2;
   const ctx = work.getContext("2d", {willReadFrequently:true});
   ctx.fillStyle = "#fff"; ctx.fillRect(0,0,work.width,work.height);
   ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(v, sx, sy, sw, sh, pad, pad, outW, outH);
+  ctx.drawImage(src, sx, sy, sw, sh, pad, pad, outW, outH);
   const img = ctx.getImageData(pad, pad, outW, outH), d = img.data, n = outW*outH;
   const gray = new Uint8Array(n); const hist = new Uint32Array(256);
   for (let i=0, j=0; i<n; i++, j+=4){ const y = (d[j]*299 + d[j+1]*587 + d[j+2]*114)/1000 | 0; gray[i]=y; hist[y]++; }
@@ -115,7 +132,6 @@ function grabCrop(){
   for (let t=0;t<256;t++){ wB+=hist[t]; if(!wB) continue; const wF=n-wB; if(!wF) break; sB+=t*hist[t]; const mB=sB/wB, mF=(sum-sB)/wF, between=wB*wF*(mB-mF)*(mB-mF); if(between>best){best=between;thr=t;} }
   let dark=0; for (let i=0;i<n;i++) if (gray[i] < thr) dark++;
   const invert = dark > n/2;          // light text on a dark card: flip so text is dark
-  const binarize = S.frame % 2 === 0; // alternate hard black/white with a softer contrast stretch
   let lo=255, hi=0; if (!binarize){ for (let i=0;i<n;i++){ if(gray[i]<lo)lo=gray[i]; if(gray[i]>hi)hi=gray[i]; } }
   const span = Math.max(1, hi-lo);
   for (let i=0, j=0; i<n; i++, j+=4){
@@ -190,7 +206,77 @@ $("qMinus").addEventListener("click", () => { S.qty = Math.max(1, S.qty-1); rend
 $("qPlus").addEventListener("click", () => { S.qty++; renderFound(); });
 $("addBtn").addEventListener("click", addLocked);
 $("skipBtn").addEventListener("click", () => resume());
-$("cam").addEventListener("click", e => { if (S.locked && !e.target.closest(".camtools, .zoom")) resume(); });
+$("cam").addEventListener("click", e => {
+  if (e.target.closest(".camtools, .zoom, .start, #shutter")) return;
+  if (S.locked) resume(); else if (S.mode === "snap" && S.stream) snap();
+});
+$("shutter").addEventListener("click", e => { e.stopPropagation(); if (S.locked) resume(); else snap(); });
+
+/* ---------- snap mode: one full-resolution photo per card ---------- */
+async function takeStill(){
+  if (S.imageCapture){
+    try {
+      let opts = {};
+      try { const pc = await S.imageCapture.getPhotoCapabilities(); if (pc?.imageWidth?.max) opts = {imageWidth: pc.imageWidth.max, imageHeight: pc.imageHeight?.max}; } catch(e){}
+      let blob; try { blob = await S.imageCapture.takePhoto(opts); } catch(e){ blob = await S.imageCapture.takePhoto(); }
+      const bmp = await createImageBitmap(blob, {imageOrientation:"from-image"}).catch(() => createImageBitmap(blob));
+      return {img: bmp, w: bmp.width, h: bmp.height, still: true};
+    } catch(e){ /* fall through to a video frame */ }
+  }
+  const v = $("video");
+  return {img: v, w: v.videoWidth, h: v.videoHeight, still: false};
+}
+function rotated(img, w, h, cw){
+  const c = document.createElement("canvas"); c.width = h; c.height = w;
+  const x = c.getContext("2d"); x.translate(h/2, w/2); x.rotate(cw ? Math.PI/2 : -Math.PI/2); x.drawImage(img, -w/2, -h/2);
+  return {img: c, w: h, h: w};
+}
+// Map the on-screen guide box onto the photo (the video is a centred crop of the photo's frame).
+function regionIn(shot, f, grow){
+  let rx = 0, ry = 0, rw = shot.w, rh = shot.h;
+  const pa = shot.w / shot.h;
+  if (pa < f.aspect){ rh = shot.w / f.aspect; ry = (shot.h - rh)/2; } else { rw = shot.h * f.aspect; rx = (shot.w - rw)/2; }
+  const cx = rx + (f.x + f.w/2)*rw, cy = ry + (f.y + f.h/2)*rh;
+  const w = f.w*rw*Math.min(1.25, grow), h = f.h*rh*grow;
+  return [Math.max(0, cx - w/2), Math.max(0, cy - h/2), Math.min(w, shot.w), Math.min(h, shot.h)];
+}
+async function snap(){
+  if (S.snapping || !S.worker || !S.codes || !S.stream) return;
+  S.snapping = true; $("shutter").classList.add("busy");
+  const f = guideFrac();
+  setStatus("Taking photo…", false, true);
+  try {
+    let shot = await takeStill();
+    // a sideways photo from the sensor: turn it to match what's on screen
+    const tries = [shot];
+    if (shot.still && (shot.w > shot.h) !== (f.aspect > 1)) { tries[0] = rotated(shot.img, shot.w, shot.h, true); tries.push(rotated(shot.img, shot.w, shot.h, false)); }
+    setStatus("Reading…", false, true);
+    const passes = [ {grow:1, psm:"7", bin:true}, {grow:1, psm:"7", bin:false}, {grow:1.9, psm:"6", bin:true}, {grow:1.9, psm:"6", bin:false} ];
+    let lastText = "";
+    for (const t of tries) for (const ps of passes){
+      const [sx, sy, sw, sh] = regionIn(t, f, ps.grow);
+      const canvas = prep(t.img, sx, sy, sw, sh, Math.round(90 * ps.grow), ps.bin);
+      await S.worker.setParameters({ tessedit_pageseg_mode: ps.psm });
+      const { data } = await S.worker.recognize(canvas);
+      lastText = data.text || "";
+      const read = CardParse.parseLine(lastText.replace(/\n/g, "  "), S.codes);
+      const matches = read ? CardParse.lookup(read, S.index) : [];
+      if (matches.length){
+        if (S.debug) $("raw").textContent = lastText.trim();
+        lock(read, matches, read.code+"|"+read.num.replace(/^0+(?=\d)/,""));
+        return;
+      }
+    }
+    // nothing usable: show what the reader saw so it's clear what to fix
+    $("ocrview").hidden = false; $("raw").hidden = false; $("raw").textContent = lastText.trim() || "(no text found)";
+    setStatus("Couldn't read the code. Hold steadier, back off a little so it focuses, or try the flashlight.", true);
+  } catch(e){
+    console.error("snapfail", e && (e.stack || e.message || e)); setStatus("The photo failed. Try again, or switch to LIVE mode.", true);
+  } finally {
+    S.snapping = false; $("shutter").classList.remove("busy");
+    await S.worker?.setParameters({ tessedit_pageseg_mode: "7" }).catch(()=>{});
+  }
+}
 
 function addLocked(){
   const L = S.locked; if (!L) return;
@@ -210,8 +296,10 @@ function undoLast(){
 }
 function resume(added){
   S.locked = null; $("found").hidden = true; $("guide").classList.remove("hit"); S.history = [];
-  if (added) setStatus(`Added ${S.lastAdded.name}.`, false, true, true);
-  else setStatus("Looking for the card code…", false, true);
+  if (!S.debug){ $("ocrview").hidden = true; $("raw").hidden = true; }
+  const idle = S.mode === "snap" ? "Line up the next card, then tap the shutter." : "Looking for the card code…";
+  if (added) setStatus(`Added ${S.lastAdded.name}.`, false, S.mode !== "snap", true);
+  else setStatus(idle, false, S.mode !== "snap");
   if (S.scanning) loop();
 }
 

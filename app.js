@@ -42,9 +42,20 @@ function listedPrints(c){
   if ((ALWAYS_HOLO[c.lang]||[]).includes(c.code)) vs = vs.map(v => v.replace(/^normal/, "holo"));
   const stamp = v => v.split("+").slice(1).join("+");
   if (vs.length && vs.every(v => stamp(v) && stamp(v)===stamp(vs[0]))) vs = vs.map(baseOf);
-  vs = [...new Set(vs)];
-  return vs.length ? vs : ["unset"];
+  return [...new Set(vs)];
 }
+const isBall = v => /ball$/.test(baseOf(v).split(":").pop());
+// Common finishes the card data doesn't cover, offered after the listed prints.
+function extraFinishes(L){
+  const has = f => L.some(f), balls = L.filter(isBall), out = [];
+  if (!has(v => baseOf(v).startsWith("normal"))) out.push("normal");
+  if (!has(v => baseOf(v).startsWith("holo"))) out.push("holo");
+  if (!has(v => baseOf(v).startsWith("reverse") && !isBall(v))) out.push("reverse");
+  if (!balls.some(v => baseOf(v) !== "masterball")) out.push("pokeball");
+  if (!has(v => baseOf(v) === "masterball") && balls.length < 2) out.push("masterball");
+  return out;
+}
+const firstPrint = c => listedPrints(c)[0] || "normal";
 
 /* ---------- data ---------- */
 async function loadData(){
@@ -173,7 +184,7 @@ function lock(top, key){
   const fav = near.find(i => R(i).lang === S.prefer);
   if (fav != null && R(ids[0]).lang !== S.prefer) ids = [fav, ...ids.filter(i => i !== fav)];
   S.locked = { key, ids };
-  S.pick = 0; S.qty = 1; S.print = listedPrints(R(ids[0]))[0]; S.history = [];
+  S.pick = 0; S.qty = 1; S.print = firstPrint(R(ids[0])); S.history = [];
   buzz();
   if (S.auto && !others.length){ addLocked(); return; }
   renderFound();
@@ -188,14 +199,16 @@ function renderFound(){
   $("othersWrap").hidden = L.ids.length < 2;
   $("others").innerHTML = L.ids.map((id, k) => { const o = R(id);
     return `<button data-k="${k}" aria-pressed="${k===S.pick}"><img src="${esc(imgUrl(o))}" alt="" loading="lazy">${esc(o.code)} ${esc(o.num)}${o.lang!=="en" ? " JP" : ""}</button>`; }).join("");
-  const prints = listedPrints(c); if (!prints.includes(S.print)) S.print = prints[0];
-  $("prints").innerHTML = prints.map((p, k) => `<button data-p="${esc(p)}" aria-pressed="${p===S.print}"><b>${k+1}</b>${esc(finishLabel(p))}</button>`).join("");
+  const LP = listedPrints(c), X = extraFinishes(LP);
+  if (![...LP, ...X].includes(S.print)) S.print = firstPrint(c);
+  const btn = (p, k, x) => `<button data-p="${esc(p)}" class="${x ? "x" : ""}" aria-pressed="${p===S.print}"><b>${k+1}</b>${esc(finishLabel(p))}</button>`;
+  $("prints").innerHTML = LP.map((p, k) => btn(p, k, false)).join("") + (X.length ? `<span class="xlbl">${LP.length ? "Not in the card data" : "Finish"}</span>` + X.map((p, k) => btn(p, LP.length + k, true)).join("") : "");
   $("qN").textContent = S.qty; $("addBtn").textContent = S.qty > 1 ? `Add ×${S.qty}` : "Add";
   $("found").hidden = false; $("tips").hidden = true;
   setStatus("Found it. Check the card and print, then Add.");
 }
-$("others").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; S.pick = +b.dataset.k; S.print = listedPrints(R(S.locked.ids[S.pick]))[0]; renderFound(); });
-$("prints").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; S.print = b.dataset.p; renderFound(); });
+$("others").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; S.pick = +b.dataset.k; S.print = firstPrint(R(S.locked.ids[S.pick])); renderFound(); });
+$("prints").addEventListener("click", e => { const b = e.target.closest("button[data-p]"); if (!b) return; S.print = b.dataset.p; renderFound(); });
 $("qMinus").addEventListener("click", () => { S.qty = Math.max(1, S.qty-1); renderFound(); });
 $("qPlus").addEventListener("click", () => { S.qty++; renderFound(); });
 $("addBtn").addEventListener("click", addLocked);
@@ -207,7 +220,7 @@ $("cam").addEventListener("click", e => {
 
 function addLocked(){
   const L = S.locked; if (!L) return;
-  const c = R(L.ids[S.pick]), finish = S.print || listedPrints(c)[0];
+  const c = R(L.ids[S.pick]), finish = S.print || firstPrint(c);
   const k = `${c.lang}|${c.setId}|${c.num}|${finish}`;
   const it = S.batch[k] || {lang:c.lang, setId:c.setId, setName:c.setName, code:c.code, num:c.num, name:c.name, img:c.img, finish, qty:0};
   it.qty += S.qty; it.t = Date.now(); S.batch[k] = it; saveBatch();

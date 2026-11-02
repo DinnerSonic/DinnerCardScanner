@@ -9,7 +9,7 @@ const GUIDE_SIZES = [72, 82, 92];
 const SCALES = [1, 0.96, 1.04];      // small framing errors: also try the card slightly zoomed in and out
 const MAX_D = 90000;                 // farther than this from every card: not a card (calibrated offline)
 const CLEAR_WIN = 0.8;               // best match must beat the runner-up by this ratio...
-const LOCK_FRAMES = 3;               // ...for this many frames in a row
+const VOTE_WINDOW = 6, VOTES_NEEDED = 3;   // or be the top guess in 3 of the last 6 frames
 const SAME_CARD_COOLDOWN = 2500;
 
 const store = {
@@ -141,19 +141,26 @@ async function loop(){
 }
 function handleMatch(top){
   const [i1, d1] = top[0], [i2, d2] = top[1], c1 = R(i1), c2 = R(i2);
-  const ratio = d1 / d2, sameName = c1.name === c2.name;
-  const good = d1 < MAX_D && (ratio < CLEAR_WIN || sameName);
-  const key = good ? (sameName ? "n:" + c1.name : "i:" + i1) : null;
-  S.history.push(key); if (S.history.length > 6) S.history.shift();
+  const ratio = d1 / d2, sameName = c1.name === c2.name, close = d1 < MAX_D;
+  const clear = close && (ratio < CLEAR_WIN || sameName);
+  S.history.push(close ? { name: c1.name, d: d1, ratio: sameName ? 0.5 : ratio, clear } : null);
+  if (S.history.length > VOTE_WINDOW) S.history.shift();
   if (S.debug) $("dbgText").textContent = top.slice(0, 4).map(([i, d]) => `${Math.round(d/1000)}k ${R(i).code} ${R(i).num} ${R(i).name}`).join("\n") + `\nratio ${ratio.toFixed(2)}`;
-  if (!good){ $("guide").classList.remove("hit"); setStatus(d1 < MAX_D ? `Maybe ${c1.name}… hold steady` : "Looking for a card…", false, true); return; }
-  $("guide").classList.add("hit");
-  const recent = S.lastAdded && S.lastAdded.key === key && Date.now() - S.lastAdded.t < SAME_CARD_COOLDOWN;
-  if (recent){ setStatus(`Just added ${c1.name}. Next card.`, false, true); return; }
-  const run = S.history.slice(-LOCK_FRAMES);
-  if (run.length < LOCK_FRAMES || !run.every(k => k === key)){ setStatus(`${c1.name}? Hold steady…`, false, true); return; }
-  lock(top, key);
+  if (!close){ S.maybe = null; $("guide").classList.remove("hit"); setStatus("Looking for a card…", false, true); return; }
+  const key = "n:" + c1.name;
+  if (S.lastAdded && S.lastAdded.key === key && Date.now() - S.lastAdded.t < SAME_CARD_COOLDOWN){ S.maybe = null; setStatus(`Just added ${c1.name}. Next card.`, false, true); return; }
+  // Vote over the last few frames, so a wobble or a finger in one frame doesn't reset everything.
+  const votes = S.history.filter(h => h && h.name === c1.name);
+  const clearVotes = votes.filter(h => h.clear).length;
+  const avg = f => votes.reduce((a, h) => a + h[f], 0) / votes.length;
+  const steadyGuess = votes.length >= VOTES_NEEDED && avg("d") < 45000 && avg("ratio") < 0.93;
+  if (clearVotes >= 2 || steadyGuess){ S.maybe = null; lock(top, key); return; }
+  S.maybe = { top, key };
+  $("guide").classList.toggle("hit", clear);
+  setStatus(`${clear ? "" : "Maybe "}${c1.name}?`, false, true, false, { label: "That's it", fn: acceptMaybe });
 }
+// Take the current best guess without waiting for the match to settle (also: tap the camera view).
+function acceptMaybe(){ const M = S.maybe; if (!M) return; S.maybe = null; lock(M.top, M.key); }
 
 /* ---------- found a card ---------- */
 function lock(top, key){
@@ -193,7 +200,10 @@ $("qMinus").addEventListener("click", () => { S.qty = Math.max(1, S.qty-1); rend
 $("qPlus").addEventListener("click", () => { S.qty++; renderFound(); });
 $("addBtn").addEventListener("click", addLocked);
 $("skipBtn").addEventListener("click", () => resume());
-$("cam").addEventListener("click", e => { if (S.locked && !e.target.closest(".camtools, .zoom")) resume(); });
+$("cam").addEventListener("click", e => {
+  if (e.target.closest(".camtools, .zoom, .start")) return;
+  if (S.locked) resume(); else if (S.maybe) acceptMaybe();
+});
 
 function addLocked(){
   const L = S.locked; if (!L) return;
@@ -218,10 +228,14 @@ function resume(added){
 }
 
 /* ---------- status, feedback ---------- */
-function setStatus(msg, err, live, undo){
+let lastStatus = "";
+function setStatus(msg, err, live, undo, action){
+  // don't rebuild the line (and its button) every frame, or a tap can land on a button that just got replaced
+  const sig = [msg, err, live, undo, action?.label].join("|"); if (sig === lastStatus) return; lastStatus = sig;
   $("status").innerHTML = "";
   const s = document.createElement("span"); s.textContent = msg; if (err) s.className = "err";
   $("status").append(s);
+  if (action){ const b = document.createElement("button"); b.textContent = action.label; b.className = "accept"; b.onclick = action.fn; $("status").append(b); }
   if (undo){ const b = document.createElement("button"); b.textContent = "Undo"; b.style.cssText = "margin-left:auto;padding:4px 10px;border:1px solid var(--line);border-radius:7px;color:var(--fg)"; b.onclick = undoLast; $("status").append(b); }
   $("dot").classList.toggle("live", !!live);
 }

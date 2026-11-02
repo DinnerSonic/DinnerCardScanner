@@ -1,9 +1,9 @@
 # Card Tally Scanner
 
-Phone camera scanner for Pokémon TCG cards. Reads the code line in a card's bottom-left corner
-(e.g. `SVI EN 086/198`), looks it up, and collects cards into a batch you paste into Card Tally.
+Phone camera scanner for Pokémon TCG cards. Hold a card inside the outline and it's recognized by its
+artwork, then pick the exact print (non-holo, reverse, pattern…) and add it to a batch you paste into Card Tally.
 
-- Works on English Scarlet & Violet era and newer cards (the ones that print a set code).
-- Text recognition runs on the phone with [Tesseract.js](https://github.com/naptha/tesseract.js) (Apache-2.0), bundled in `vendor/`.
-- Card list from [TCGdex](https://github.com/tcgdex/cards-database) (MIT), in `cards-en.json`.
+- Matches against ~23,500 English and Japanese cards using small artwork fingerprints (`fp.bin`), all on the phone.
+- Fingerprints are built by `tools/artfp.py`; `match.js` computes the same fingerprint from the camera.
+- Card data and images from [TCGdex](https://github.com/tcgdex/cards-database) (MIT); card images are loaded from TCGdex's image server.
 - The batch is kept in this browser only until you copy it out.

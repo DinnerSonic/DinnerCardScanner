@@ -7,3 +7,5 @@ artwork, then pick the exact print (non-holo, reverse, pattern…) and add it to
 - Fingerprints are built by `tools/artfp.py`; `match.js` computes the same fingerprint from the camera.
 - Card data and images from [TCGdex](https://github.com/tcgdex/cards-database) (MIT); card images are loaded from TCGdex's image server.
 - The batch is kept in this browser only until you copy it out.
+- Optional card packs (`.cardpack` files) can be loaded from your own device and are stored only in that browser.
+  No pack data is part of this site.

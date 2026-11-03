@@ -59,6 +59,8 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .fhead img{width:96px;aspect-ratio:245/337;border-radius:6px;background:var(--panel);object-fit:cover}
 .found .nm{font-size:19px;font-weight:600;line-height:1.15}
 .found .alt{font-size:12px;color:var(--muted)}
+.others .tip,.prints .tip{display:none}
+.hint2{font-size:11px;color:var(--muted)}
 .found .meta{font:600 13px var(--display);letter-spacing:.04em;color:var(--muted);margin-top:4px}
 .others{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
 .others button{flex:none;width:56px;display:flex;flex-direction:column;align-items:center;gap:2px;font:600 10px var(--display);color:var(--muted);border-radius:7px;padding:3px;border:1px solid transparent}
@@ -77,7 +79,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .qty button{width:46px;height:46px;border-radius:10px;background:var(--panel);border:1px solid var(--line);font:700 22px var(--display)}
 .qty span{font:700 24px var(--display);min-width:1.8em;text-align:center}
 .add{flex:1;height:52px;border-radius:12px;background:var(--ok);color:#06210f;font:700 17px var(--display);letter-spacing:.08em;text-transform:uppercase}
-.skip{height:46px;padding:0 16px;border-radius:12px;border:1px solid var(--line);background:var(--panel);font-weight:600}
+.skip{width:100%;height:42px;padding:0 16px;border-radius:12px;border:1px solid var(--line);background:var(--panel);font-weight:600}
 .lbl{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 .hint{font-size:12px;color:var(--muted);line-height:1.45}
 .foot{display:flex;gap:8px}
@@ -137,6 +139,7 @@ textarea.out{width:100%;height:90px;background:var(--sunk);color:var(--fg);borde
     <div class="status"><span class="dot" id="dot"></span><span id="status">Camera off</span></div>
 
     <div class="found" id="found" hidden>
+      <button class="skip" id="skipBtn">✕ Not this card · keep scanning</button>
       <div class="fhead">
         <img id="fImg" alt="">
         <div>
@@ -145,13 +148,12 @@ textarea.out{width:100%;height:90px;background:var(--sunk);color:var(--fg);borde
           <div class="meta" id="fMeta"></div>
         </div>
       </div>
-      <div id="othersWrap" hidden><div class="lbl">Or one of these</div><div class="others" id="others"></div></div>
-      <div><div class="lbl">Print</div><div class="prints" id="prints"></div></div>
+      <div id="othersWrap" hidden><div class="lbl">Or one of these <span class="hint2">· double-tap to add</span></div><div class="others" id="others"></div></div>
+      <div><div class="lbl">Print <span class="hint2">· double-tap to add</span></div><div class="prints" id="prints"></div></div>
       <div class="row">
         <div class="qty"><button id="qMinus" aria-label="One fewer">−</button><span id="qN">1</span><button id="qPlus" aria-label="One more">+</button></div>
         <button class="add" id="addBtn">Add</button>
       </div>
-      <button class="skip" id="skipBtn">Not this card · keep scanning</button>
     </div>
 
     <p class="hint" id="tips">Tips: fill the outline with the card, keep it flat, and tilt it a little if a holo or sleeve is glaring. The flashlight helps in dim rooms.</p>

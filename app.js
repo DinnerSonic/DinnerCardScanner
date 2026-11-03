@@ -207,8 +207,22 @@ function renderFound(){
   $("found").hidden = false; $("tips").hidden = true;
   setStatus("Found it. Check the card and print, then Add.");
 }
-$("others").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; S.pick = +b.dataset.k; S.print = firstPrint(R(S.locked.ids[S.pick])); renderFound(); });
-$("prints").addEventListener("click", e => { const b = e.target.closest("button[data-p]"); if (!b) return; S.print = b.dataset.p; renderFound(); });
+// A second tap on the option that's already picked (or two quick taps) adds the card.
+let lastTap = { what: "", t: 0 };
+function tapTwice(what){ const now = Date.now(), again = lastTap.what === what && now - lastTap.t < 600; lastTap = { what, t: now }; return again; }
+$("others").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return; const k = +b.dataset.k;
+  const again = tapTwice("c" + k);
+  if (k !== S.pick){ S.pick = k; S.print = firstPrint(R(S.locked.ids[S.pick])); renderFound(); }
+  if (again) addLocked();
+});
+$("prints").addEventListener("click", e => {
+  const b = e.target.closest("button[data-p]"); if (!b) return;
+  const again = tapTwice("p" + b.dataset.p);
+  S.print = b.dataset.p; renderFound();
+  if (again) addLocked();
+});
+$("fImg").addEventListener("click", () => { if (tapTwice("img")) addLocked(); });
 $("qMinus").addEventListener("click", () => { S.qty = Math.max(1, S.qty-1); renderFound(); });
 $("qPlus").addEventListener("click", () => { S.qty++; renderFound(); });
 $("addBtn").addEventListener("click", addLocked);

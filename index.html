@@ -87,7 +87,8 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .foot .batchbtn{background:var(--accent);color:var(--accent-ink);border-color:transparent}
 .toggle{display:flex;align-items:center;gap:8px;font-size:13px}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
-.seg button{padding:6px 12px;font-size:13px;font-weight:600}
+.seg{flex-wrap:wrap}
+.seg button{padding:6px 10px;font-size:13px;font-weight:600}
 .seg button[aria-pressed="true"]{background:var(--ink)}
 .toggle input{width:20px;height:20px;accent-color:var(--accent)}
 
@@ -128,7 +129,7 @@ textarea.out{width:100%;height:90px;background:var(--sunk);color:var(--fg);borde
     <div class="start" id="start">
       <div>
         <h1>Card Tally Scanner</h1>
-        <p>Hold a card inside the outline and it's recognized by its artwork. Works with about 23,500 English and Japanese cards. Pick the exact print, add it, and copy the batch into Card Tally.</p>
+        <p>Hold a card inside the outline and it's recognized by its artwork. Works with about 23,500 English and Japanese cards, plus the Chinese and Korean versions of Japanese sets. Pick the exact print, add it, and copy the batch into Card Tally.</p>
         <button class="big" id="startBtn" disabled>Loading cards…</button>
         <p id="startErr" class="err" hidden></p>
       </div>
@@ -157,7 +158,7 @@ textarea.out{width:100%;height:90px;background:var(--sunk);color:var(--fg);borde
     </div>
 
     <p class="hint" id="tips">Tips: fill the outline with the card, keep it flat, and tilt it a little if a holo or sleeve is glaring. The flashlight helps in dim rooms.</p>
-    <div class="toggle">Mostly scanning <span class="seg" id="prefer"><button data-l="en">English</button><button data-l="ja">Japanese</button></span></div>
+    <div class="toggle">Mostly scanning <span class="seg" id="prefer"><button data-l="en">English</button><button data-l="ja">Japanese</button><button data-l="zh">Chinese</button><button data-l="ko">Korean</button></span></div>
     <label class="toggle"><input type="checkbox" id="auto"> Add automatically when a card locks in (first print)</label>
     <div class="foot">
       <button class="batchbtn" id="openBatch">Batch · <span id="bCount">0</span></button>

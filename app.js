@@ -18,11 +18,20 @@ const store = {
 };
 const S = {
   rows: null, fp: null, stream: null, track: null, scanning: false, busy: false, history: [],
-  locked: null, pick: 0, print: null, qty: 1, auto: store.get("auto", false), prefer: store.get("prefer", "en"),
+  locked: null, pick: 0, print: null, qty: 1, auto: store.get("auto", false), prefer: store.get("prefer", "en"), twins: {},
   batch: store.get("batch", {}), lastAdded: null, guide: store.get("guide3", 1), debug: false, wake: null
 };
 // rows: [lang, setId, code, num, englishName, originalName, rarity, variants, imagePath, setName, officialCount]
-const R = i => { const r = S.rows[i]; return {i, lang:r[0], setId:r[1], code:r[2], num:r[3], name:r[4], orig:r[5], rarity:r[6], variants:r[7], img:r[8], setName:r[9], off:r[10]}; };
+const TAG = {en:"", ja:"JP", zh:"CH", ko:"KR"};
+// A Japanese card can stand in for its Chinese or Korean twin (same set code, same number, same art):
+// when you're scanning Chinese or Korean, the match is shown and logged as that twin.
+const R = i => {
+  const r = S.rows[i];
+  const c = {i, lang:r[0], setId:r[1], code:r[2], num:r[3], name:r[4], orig:r[5], rarity:r[6], variants:r[7], img:r[8], setName:r[9], off:r[10]};
+  const tw = (S.prefer === "zh" || S.prefer === "ko") && S.twins[i]?.[S.prefer];
+  if (tw) Object.assign(c, {lang:S.prefer, orig:tw[0], name:tw[1], rarity:tw[2], variants:tw[3], setName:tw[4]});
+  return c;
+};
 const imgUrl = c => c.img ? IMG_BASE + c.img + "/low.webp" : "";
 
 /* ---------- prints (same rules as Card Tally) ---------- */
@@ -61,7 +70,7 @@ const firstPrint = c => listedPrints(c)[0] || "normal";
 async function loadData(){
   try {
     const [cards, fp] = await Promise.all([fetch("cards.json").then(r => r.json()), fetch("fp.bin").then(r => r.arrayBuffer())]);
-    S.rows = cards.rows; S.fp = new Int8Array(fp);
+    S.rows = cards.rows; S.twins = cards.twins || {}; S.fp = new Int8Array(fp);
     if (S.fp.length !== S.rows.length * CardMatch.DIMS) throw new Error("size");
     $("startBtn").disabled = false; $("startBtn").textContent = "Start camera";
   } catch(e){ fail("Couldn't load the card list. Check your connection and reload."); $("startBtn").textContent = "Couldn't load"; }
@@ -195,10 +204,10 @@ function renderFound(){
   $("fImg").src = imgUrl(c); $("fImg").alt = c.name;
   $("fName").textContent = c.name;
   $("fAlt").textContent = c.orig || "";
-  $("fMeta").textContent = `${c.code} ${c.num}${c.off ? "/"+String(c.off).padStart(3,"0") : ""} · ${c.setName}${c.rarity ? " · "+c.rarity : ""}${c.lang!=="en" ? " · JP" : ""}`;
+  $("fMeta").textContent = `${c.code} ${c.num}${c.off ? "/"+String(c.off).padStart(3,"0") : ""} · ${c.setName}${c.rarity ? " · "+c.rarity : ""}${TAG[c.lang] ? " · "+TAG[c.lang] : ""}`;
   $("othersWrap").hidden = L.ids.length < 2;
   $("others").innerHTML = L.ids.map((id, k) => { const o = R(id);
-    return `<button data-k="${k}" aria-pressed="${k===S.pick}"><img src="${esc(imgUrl(o))}" alt="" loading="lazy">${esc(o.code)} ${esc(o.num)}${o.lang!=="en" ? " JP" : ""}</button>`; }).join("");
+    return `<button data-k="${k}" aria-pressed="${k===S.pick}"><img src="${esc(imgUrl(o))}" alt="" loading="lazy">${esc(o.code)} ${esc(o.num)}${TAG[o.lang] ? " "+TAG[o.lang] : ""}</button>`; }).join("");
   const LP = listedPrints(c), X = extraFinishes(LP);
   if (![...LP, ...X].includes(S.print)) S.print = firstPrint(c);
   const btn = (p, k, x) => `<button data-p="${esc(p)}" class="${x ? "x" : ""}" aria-pressed="${p===S.print}"><b>${k+1}</b>${esc(finishLabel(p))}</button>`;
@@ -280,7 +289,7 @@ let tt; function toast(t){ const el = $("toast"); el.textContent = t; el.hidden 
 function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 $("auto").checked = S.auto;
 function renderPrefer(){ for (const b of document.querySelectorAll("#prefer button")) b.setAttribute("aria-pressed", String(b.dataset.l === S.prefer)); }
-$("prefer").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; S.prefer = b.dataset.l; store.set("prefer", S.prefer); renderPrefer(); });
+$("prefer").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; S.prefer = b.dataset.l; store.set("prefer", S.prefer); renderPrefer(); if (S.locked){ S.print = firstPrint(R(S.locked.ids[S.pick])); renderFound(); } });
 renderPrefer();
 $("auto").addEventListener("change", e => { S.auto = e.target.checked; store.set("auto", S.auto); });
 
@@ -291,7 +300,7 @@ function renderBatch(){
   const items = Object.entries(S.batch).sort((a,b) => (b[1].t||0) - (a[1].t||0));
   const n = renderCount();
   $("sTotal").textContent = items.length ? `${n} cards · ${items.length} unique` : "";
-  $("list").innerHTML = items.length ? items.map(([k,it]) => `<div class="item"><img src="${esc(it.img ? IMG_BASE+it.img+"/low.webp" : "")}" alt="" loading="lazy"><div style="min-width:0"><div class="nm">${esc(it.name)}</div><div class="meta">${esc(it.code)} ${esc(it.num)} · ${esc(finishLabel(it.finish))}${(it.lang||"en")!=="en" ? " · JP" : ""}</div></div>
+  $("list").innerHTML = items.length ? items.map(([k,it]) => `<div class="item"><img src="${esc(it.img ? IMG_BASE+it.img+"/low.webp" : "")}" alt="" loading="lazy"><div style="min-width:0"><div class="nm">${esc(it.name)}</div><div class="meta">${esc(it.code)} ${esc(it.num)} · ${esc(finishLabel(it.finish))}${TAG[it.lang||"en"] ? " · "+TAG[it.lang] : ""}</div></div>
     <button data-k="${esc(k)}" data-d="-1" aria-label="One fewer">−</button><span class="ct">×${it.qty}</span><button data-k="${esc(k)}" data-d="1" aria-label="One more">+</button></div>`).join("")
     : `<div class="empty">Nothing scanned yet. Cards you add show up here until you copy them into Card Tally.</div>`;
   $("out").hidden = true;

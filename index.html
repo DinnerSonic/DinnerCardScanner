@@ -40,7 +40,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .dbg{position:absolute;left:10px;top:10px;display:flex;gap:6px;align-items:flex-start}
 .dbg canvas{width:62px;border:1px solid var(--line)}
 .dbg pre{margin:0;font:500 11px ui-monospace,monospace;background:rgba(13,16,22,.8);padding:4px 6px;border-radius:5px;white-space:pre}
-.start{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:20px;background:var(--bg)}
+.start{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:20px;background:var(--bg);overflow-y:auto}
 .start h1{font:700 26px var(--display);margin:0 0 6px;letter-spacing:.04em}
 .start p{color:var(--muted);max-width:30em;margin:0 auto 16px;line-height:1.5}
 .big{background:var(--accent);color:var(--accent-ink);font:700 16px var(--display);letter-spacing:.08em;text-transform:uppercase;padding:14px 26px;border-radius:12px}
@@ -136,7 +136,7 @@ textarea.out{width:100%;height:90px;background:var(--sunk);color:var(--fg);borde
     <div class="start" id="start">
       <div>
         <h1>Card Tally Scanner</h1>
-        <p>Hold a card inside the outline and it's recognized by its artwork. Works with about 23,500 English and Japanese cards, plus the Chinese and Korean versions of Japanese sets. Simplified Chinese (mainland) cards need the pack file loaded on this device. Pick the exact print, add it, and copy the batch into Card Tally.</p>
+        <p>Hold a card in the outline to recognize it by its artwork.</p>
         <button class="big" id="startBtn" disabled>Loading cards…</button>
         <p id="startErr" class="err" hidden></p>
       </div>

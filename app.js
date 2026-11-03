@@ -169,7 +169,7 @@ async function loop(){
     while (S.scanning && !S.locked && document.visibilityState === "visible"){
       const qs = queries();
       if (!qs){ await sleep(150); continue; }
-      const top = CardMatch.search(S.fp, qs, 6);
+      const top = CardMatch.search(S.fp, qs, 40);   // deep enough to catch every reprint of the same art
       handleMatch(top);
       await sleep(60);   // let the page breathe between frames
     }
@@ -203,20 +203,22 @@ function acceptMaybe(){ const M = S.maybe; if (!M) return; S.maybe = null; lock(
 function lock(top, key){
   const d1 = top[0][1], best = R(top[0][0]);
   // alternatives worth showing: same Pokémon/trainer (reprints), or nearly as close
-  const others = top.slice(1).filter(([i, d]) => R(i).name === best.name || d < d1 * 1.35).slice(0, 4).map(([i]) => i);
+  // reprints of the same card in other sets (same name, similar art), then anything nearly as close
+  const others = top.slice(1).filter(([i, d]) => (R(i).name === best.name && d < Math.max(d1 * 2.5, 40000)) || d < d1 * 1.35).slice(0, 15).map(([i]) => i);
   let ids = [top[0][0], ...others];
   // English and Japanese printings (and reprints) can share identical art: on a near-tie, put your usual language first
   const near = ids.filter(i => R(i).name === best.name && top.find(t => t[0]===i)[1] <= d1 * 1.2);
   const fav = near.find(i => R(i).lang === S.prefer);
   if (fav != null && R(ids[0]).lang !== S.prefer) ids = [fav, ...ids.filter(i => i !== fav)];
   // also offer the other language versions of Japanese matches (same art: Japanese, Chinese, Korean)
+  // (for the best match always; for the rest only the language you're scanning, so the row stays short)
   const opts = [];
-  for (const id of ids){
+  for (const [k, id] of ids.entries()){
     opts.push(id);
     const c = R(id); if (S.rows[id][0] !== "ja") continue;
-    for (const l of ["ja", "zh", "ko"]) if (l !== c.lang && (l === "ja" || S.twins[id]?.[l])) opts.push(id + ":" + l);
+    for (const l of ["ja", "zh", "ko"]) if (l !== c.lang && (l === "ja" || S.twins[id]?.[l]) && (k === 0 || l === S.prefer)) opts.push(id + ":" + l);
   }
-  ids = opts.slice(0, 9);
+  ids = opts.slice(0, 24);
   S.locked = { key, ids };
   S.pick = 0; S.qty = 1; S.print = firstPrint(R(ids[0])); S.history = [];
   buzz();

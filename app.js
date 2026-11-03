@@ -224,7 +224,7 @@ function renderFound(){
   const btn = (p, k, x) => `<button data-p="${esc(p)}" class="${x ? "x" : ""}" aria-pressed="${p===S.print}"><b>${k+1}</b>${esc(finishLabel(p))}</button>`;
   $("prints").innerHTML = LP.map((p, k) => btn(p, k, false)).join("") + (X.length ? `<span class="xlbl">${LP.length ? "Not in the card data" : "Finish"}</span>` + X.map((p, k) => btn(p, LP.length + k, true)).join("") : "");
   $("qN").textContent = S.qty; $("addBtn").textContent = S.qty > 1 ? `Add ×${S.qty}` : "Add";
-  $("found").hidden = false; $("tips").hidden = true;
+  $("found").hidden = false; $("tips").hidden = true; renderOther();
   setStatus("Found it. Check the card and print, then Add.");
 }
 // A second tap on the option that's already picked (or two quick taps) adds the card.
@@ -252,6 +252,35 @@ $("cam").addEventListener("click", e => {
   if (S.locked) resume(); else if (S.maybe) acceptMaybe();
 });
 
+/* ---------- "Part of another set": log the recognized card under the set printed on yours ---------- */
+// Simplified Chinese products (Gem Packs CBB…, CSV…, CS…) aren't in the card data; their codes start with C.
+const otherLang = (set, c) => /^C(BB|SV|S|SM)/i.test(set) ? "zh" : c.lang;
+function renderOther(){
+  if ($("otherBox").hidden || !S.locked) return;
+  const c = R(S.locked.ids[S.pick]), set = $("otherSet").value.trim().toUpperCase();
+  $("otherLang").textContent = `${c.name} · ${finishLabel(S.print)} · ${({en:"English",ja:"Japanese",zh:"Chinese",ko:"Korean"})[otherLang(set, c)]}`;
+}
+$("otherBtn").addEventListener("click", () => {
+  const box = $("otherBox"); box.hidden = !box.hidden;
+  if (!box.hidden){ $("otherSet").value = store.get("otherSet", ""); $("otherNum").value = ""; renderOther(); ($("otherSet").value ? $("otherNum") : $("otherSet")).focus(); }
+});
+$("otherSet").addEventListener("input", renderOther);
+function addOther(){
+  const L = S.locked; if (!L) return;
+  const c = R(L.ids[S.pick]), finish = S.print || firstPrint(c);
+  const set = $("otherSet").value.trim().toUpperCase().replace(/[|\s]+/g, "") || "OTHER";
+  const num = $("otherNum").value.trim().replace(/[|\s]+/g, "") || "?";
+  const lang = otherLang(set, c); store.set("otherSet", set === "OTHER" ? "" : set);
+  const k = `${lang}|~${set}|${num}|${finish}|${c.name}`;
+  const it = S.batch[k] || {lang, setId:"~"+set, setName:"Other set", code:set, num, name:c.name, img:c.img, finish, qty:0, other:true};
+  it.qty += S.qty; it.t = Date.now(); S.batch[k] = it; saveBatch();
+  S.lastAdded = {key: L.key, t: Date.now(), batchKey: k, qty: S.qty, name: c.name};
+  toast(`+${S.qty} ${c.name} (${set} ${num})`);
+  resume(true);
+}
+$("otherAdd").addEventListener("click", addOther);
+$("otherNum").addEventListener("keydown", e => { if (e.key === "Enter") addOther(); });
+
 function addLocked(){
   const L = S.locked; if (!L) return;
   const c = R(L.ids[S.pick]), finish = S.print || firstPrint(c);
@@ -269,7 +298,7 @@ function undoLast(){
   toast(`Removed ${A.name}`); S.lastAdded = null; setStatus("Looking for a card…", false, true);
 }
 function resume(added){
-  S.locked = null; $("found").hidden = true; $("tips").hidden = false; $("guide").classList.remove("hit"); S.history = [];
+  S.locked = null; $("found").hidden = true; $("otherBox").hidden = true; $("tips").hidden = false; $("guide").classList.remove("hit"); S.history = [];
   if (added) setStatus(`Added ${S.lastAdded.name}.`, false, true, true); else setStatus("Looking for a card…", false, true);
   if (S.scanning) loop();
 }
@@ -311,7 +340,7 @@ function renderBatch(){
   const items = Object.entries(S.batch).sort((a,b) => (b[1].t||0) - (a[1].t||0));
   const n = renderCount();
   $("sTotal").textContent = items.length ? `${n} cards · ${items.length} unique` : "";
-  $("list").innerHTML = items.length ? items.map(([k,it]) => `<div class="item"><img src="${esc(it.img ? IMG_BASE+it.img+"/low.webp" : "")}" alt="" loading="lazy"><div style="min-width:0"><div class="nm">${esc(it.name)}</div><div class="meta">${esc(it.code)} ${esc(it.num)} · ${esc(finishLabel(it.finish))}${TAG[it.lang||"en"] ? " · "+TAG[it.lang] : ""}</div></div>
+  $("list").innerHTML = items.length ? items.map(([k,it]) => `<div class="item"><img src="${esc(it.img ? IMG_BASE+it.img+"/low.webp" : "")}" alt="" loading="lazy"><div style="min-width:0"><div class="nm">${esc(it.name)}</div><div class="meta">${esc(it.code)} ${esc(it.num)}${it.other ? " (other set)" : ""} · ${esc(finishLabel(it.finish))}${TAG[it.lang||"en"] ? " · "+TAG[it.lang] : ""}</div></div>
     <button data-k="${esc(k)}" data-d="-1" aria-label="One fewer">−</button><span class="ct">×${it.qty}</span><button data-k="${esc(k)}" data-d="1" aria-label="One more">+</button></div>`).join("")
     : `<div class="empty">Nothing scanned yet. Cards you add show up here until you copy them into Card Tally.</div>`;
   $("out").hidden = true;

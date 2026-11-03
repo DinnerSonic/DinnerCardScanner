@@ -25,11 +25,14 @@ const S = {
 const TAG = {en:"", ja:"JP", zh:"CH", ko:"KR"};
 // A Japanese card can stand in for its Chinese or Korean twin (same set code, same number, same art):
 // when you're scanning Chinese or Korean, the match is shown and logged as that twin.
-const R = i => {
+const R = id => {
+  // id is a row number, or "row:lang" to show a Japanese row as a specific language (ja, zh or ko)
+  const [i, as] = typeof id === "string" ? [+id.split(":")[0], id.split(":")[1]] : [id, null];
   const r = S.rows[i];
-  const c = {i, lang:r[0], setId:r[1], code:r[2], num:r[3], name:r[4], orig:r[5], rarity:r[6], variants:r[7], img:r[8], setName:r[9], off:r[10]};
-  const tw = (S.prefer === "zh" || S.prefer === "ko") && S.twins[i]?.[S.prefer];
-  if (tw) Object.assign(c, {lang:S.prefer, orig:tw[0], name:tw[1], rarity:tw[2], variants:tw[3], setName:tw[4]});
+  const c = {i, id, lang:r[0], setId:r[1], code:r[2], num:r[3], name:r[4], orig:r[5], rarity:r[6], variants:r[7], img:r[8], setName:r[9], off:r[10]};
+  const want = as || ((S.prefer === "zh" || S.prefer === "ko") ? S.prefer : null);
+  const tw = want && want !== "ja" && S.twins[i]?.[want];
+  if (tw) Object.assign(c, {lang:want, orig:tw[0], name:tw[1], rarity:tw[2], variants:tw[3], setName:tw[4]});
   return c;
 };
 const imgUrl = c => c.img ? IMG_BASE + c.img + "/low.webp" : "";
@@ -192,6 +195,14 @@ function lock(top, key){
   const near = ids.filter(i => R(i).name === best.name && top.find(t => t[0]===i)[1] <= d1 * 1.2);
   const fav = near.find(i => R(i).lang === S.prefer);
   if (fav != null && R(ids[0]).lang !== S.prefer) ids = [fav, ...ids.filter(i => i !== fav)];
+  // also offer the other language versions of Japanese matches (same art: Japanese, Chinese, Korean)
+  const opts = [];
+  for (const id of ids){
+    opts.push(id);
+    const c = R(id); if (S.rows[id][0] !== "ja") continue;
+    for (const l of ["ja", "zh", "ko"]) if (l !== c.lang && (l === "ja" || S.twins[id]?.[l])) opts.push(id + ":" + l);
+  }
+  ids = opts.slice(0, 9);
   S.locked = { key, ids };
   S.pick = 0; S.qty = 1; S.print = firstPrint(R(ids[0])); S.history = [];
   buzz();

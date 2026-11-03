@@ -212,13 +212,16 @@ function lock(top, key){
   if (fav != null && R(ids[0]).lang !== S.prefer) ids = [fav, ...ids.filter(i => i !== fav)];
   // also offer the other language versions of Japanese matches (same art: Japanese, Chinese, Korean)
   // (for the best match always; for the rest only the language you're scanning, so the row stays short)
-  const opts = [];
+  // Mixed: every reprint first, then every language version of them tacked on at the end
+  const opts = [], tail = [], mixed = S.prefer === "mix";
   for (const [k, id] of ids.entries()){
     opts.push(id);
     const c = R(id); if (S.rows[id][0] !== "ja") continue;
-    for (const l of ["ja", "zh", "ko"]) if (l !== c.lang && (l === "ja" || S.twins[id]?.[l]) && (k === 0 || l === S.prefer)) opts.push(id + ":" + l);
+    for (const l of ["ja", "zh", "ko"]) if (l !== c.lang && (l === "ja" || S.twins[id]?.[l])){
+      if (mixed) tail.push(id + ":" + l); else if (k === 0 || l === S.prefer) opts.push(id + ":" + l);
+    }
   }
-  ids = opts.slice(0, 24);
+  ids = mixed ? opts.concat(tail).slice(0, 40) : opts.slice(0, 24);
   S.locked = { key, ids };
   S.pick = 0; S.qty = 1; S.print = firstPrint(R(ids[0])); S.history = [];
   buzz();

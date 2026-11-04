@@ -441,6 +441,87 @@ $("packClear").addEventListener("click", async () => {
   usePacks([]); renderPack(); toast("Chinese pack removed");
 });
 
+/* ---------- game controllers (Gamepad API) and keyboard-style remotes ----------
+   Positions follow the browser's "standard" layout, so on Nintendo controllers A (right face button)
+   adds and B (bottom) skips. The readout under the toggles shows what each press registers as. */
+const PAD_ACTIONS = {
+  1: "accept", 0: "skip", 3: "torch", 2: "other",
+  4: "less", 5: "more", 6: "less", 7: "more",
+  8: "undo", 9: "batch",
+  12: "up", 13: "down", 14: "left", 15: "right"
+};
+const ACTION_LABEL = {accept:"Add / That's it", skip:"Not this card", torch:"Flashlight", other:"Part of another set",
+  less:"Copies −", more:"Copies +", undo:"Undo last add", batch:"Open/close batch", up:"Previous print", down:"Next print", left:"Previous card option", right:"Next card option"};
+function padAction(a){
+  const L = S.locked, sheetOpen = !$("sheet").hidden;
+  if (a === "batch"){ if (sheetOpen) $("closeBatch").click(); else $("openBatch").click(); return; }
+  if (sheetOpen) return;
+  if (a === "accept"){
+    if (!S.stream && !$("startBtn").disabled) return startCamera();
+    if (L) return addLocked();
+    if (S.maybe) return acceptMaybe();
+    return;
+  }
+  if (a === "skip"){ if (L) resume(); return; }
+  if (a === "undo"){ undoLast(); return; }
+  if (a === "torch"){ if (!$("torch").hidden) $("torch").click(); return; }
+  if (!L) return;
+  if (a === "other"){ $("otherBtn").click(); return; }
+  if (a === "less" || a === "more"){ S.qty = Math.max(1, S.qty + (a === "more" ? 1 : -1)); renderFound(); return; }
+  if (a === "left" || a === "right"){
+    const n = L.ids.length; S.pick = (S.pick + (a === "right" ? 1 : n - 1)) % n;
+    S.print = firstPrint(R(L.ids[S.pick])); renderFound();
+    document.querySelector('#others button[aria-pressed="true"]')?.scrollIntoView({block:"nearest", inline:"nearest"});
+    return;
+  }
+  if (a === "up" || a === "down"){
+    const c = R(L.ids[S.pick]), LP = listedPrints(c), all = [...LP, ...extraFinishes(LP)];
+    const i = Math.max(0, all.indexOf(S.print)); S.print = all[(i + (a === "down" ? 1 : all.length - 1)) % all.length]; renderFound();
+  }
+}
+const PAD = { prev: {}, axisHeld: {}, last: "" };
+function padInfo(msg){ PAD.last = msg; renderPad(); }
+function renderPad(){
+  const pads = [...(navigator.getGamepads?.() || [])].filter(Boolean);
+  $("padInfo").textContent = pads.length
+    ? `Controller: ${pads.map(g => g.id.replace(/\s*\(.*?Vendor.*?\)/i, "")).join(", ")} · ${pads[0].mapping || "non-standard"} layout${PAD.last ? " · " + PAD.last : ""}`
+    : "Controller: none yet. Pair one with the phone, then press any button on it.";
+}
+function pollPads(){
+  for (const g of navigator.getGamepads?.() || []){
+    if (!g) continue;
+    const prev = PAD.prev[g.index] || [];
+    g.buttons.forEach((b, i) => {
+      const down = b.pressed || b.value > 0.5;
+      if (down && !prev[i]){
+        const a = g.mapping === "standard" ? PAD_ACTIONS[i] : null;
+        padInfo(`button ${i}${a ? " → " + ACTION_LABEL[a] : " (not mapped)"}`);
+        if (a) padAction(a);
+      }
+      prev[i] = down;
+    });
+    PAD.prev[g.index] = prev;
+    // left stick works like the D-pad (one step per push)
+    const [x = 0, y = 0] = g.axes, held = PAD.axisHeld[g.index] || {};
+    const dirs = {left: x < -0.6, right: x > 0.6, up: y < -0.6, down: y > 0.6};
+    for (const [d, on] of Object.entries(dirs)){ if (on && !held[d]){ padInfo(`stick ${d} → ${ACTION_LABEL[d]}`); padAction(d); } held[d] = on; }
+    PAD.axisHeld[g.index] = held;
+  }
+}
+let padTimer = 0;
+function startPadPolling(){ if (!padTimer) padTimer = setInterval(pollPads, 40); renderPad(); }
+window.addEventListener("gamepadconnected", e => { padInfo(`connected (${e.gamepad.buttons.length} buttons)`); startPadPolling(); });
+window.addEventListener("gamepaddisconnected", () => { PAD.last = "disconnected"; renderPad(); });
+if ([...(navigator.getGamepads?.() || [])].some(Boolean)) startPadPolling(); else renderPad();
+// Keyboard-style remotes and presenters send key presses instead.
+const KEY_ACTIONS = { Enter:"accept", " ":"accept", Escape:"skip", Backspace:"skip", ArrowLeft:"left", ArrowRight:"right", ArrowUp:"up", ArrowDown:"down",
+  "+":"more", "=":"more", "-":"less", PageUp:"left", PageDown:"right", MediaPlayPause:"accept", AudioVolumeUp:"right", AudioVolumeDown:"left" };
+document.addEventListener("keydown", e => {
+  if (e.target.closest?.("input, textarea")) return;
+  const a = KEY_ACTIONS[e.key]; if (!a) return;
+  e.preventDefault(); padInfo(`key ${e.key === " " ? "Space" : e.key} → ${ACTION_LABEL[a]}`); padAction(a);
+});
+
 renderCount(); loadData();
 // test hook: lets an automated check match a still image without a camera
 window.__scanTest = { R, listedPrints, match: canvas => CardMatch.search(S.fp, [CardMatch.fingerprint(canvas)], 5) };

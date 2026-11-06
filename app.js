@@ -1,7 +1,7 @@
 (() => {
 const $ = id => document.getElementById(id);
 const IMG_BASE = "https://assets.tcgdex.net/";
-const VLABEL = {normal:"Non-holo", holo:"Holo", reverse:"Reverse", pokeball:"Poké Ball / Patterned", masterball:"Alt Ball / Alt Pattern", unset:"Finish not set", asnumbered:"As numbered"};
+const VLABEL = {normal:"Non-holo", holo:"Holo", reverse:"Reverse", pokeball:"Poké Ball pattern", masterball:"Master Ball pattern", unset:"Finish not set", asnumbered:"As numbered"};
 const PAT = {energy:"Energy symbol", quickball:"Quick Ball", loveball:"Love Ball", duskball:"Dusk Ball", friendball:"Friend Ball", pokeball:"Poké Ball",
   masterball:"Master Ball", cosmos:"Cosmos", "cracked-ice":"Cracked Ice", rainbow:"Rainbow", gold:"Gold", league:"League", galaxy:"Galaxy", tinsel:"Tinsel", "team-rocket":"Team Rocket"};
 const ALWAYS_HOLO = {en:["30C"]};
